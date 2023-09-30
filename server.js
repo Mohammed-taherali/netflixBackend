@@ -5,24 +5,11 @@ const { MongoClient } = require("mongodb");
 const dotenv = require("dotenv");
 dotenv.config();
 const { authenticate } = require("./authenticate");
-// const mongoose = require("mongoose");
 const { validEmail, validPassword, newFunc } = require("./helpers");
 const app = express();
 const PORT = process.env.PORT || 5000;
-// const uri = "mongodb://0.0.0.0:27017/";
-// const uri = `mongodb+srv://${process.env.}:KPB9cLCPZrCakomB@netflixclone.oumor9m.mongodb.net/?retryWrites=true&w=majority`;
 const uri = process.env.URI;
 const client = new MongoClient(uri);
-// const uri = "mongodb://0.0.0.0:27017/netflixClone";
-// mongoose.connect(uri);
-
-// const UserSchema = new mongoose.Schema({
-//     name: String,
-//     age: Number,
-//     occupation: String,
-// });
-
-// const UserModel = mongoose.model("userData", UserSchema);
 
 app.use(cors());
 app.use(express.json());
