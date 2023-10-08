@@ -1,41 +1,56 @@
 // backend/server.js
 const express = require("express");
 const cors = require("cors");
-const { MongoClient } = require("mongodb");
 const dotenv = require("dotenv");
+const crypto = require("crypto");
+const cookieParser = require("cookie-parser");
+const sessions = require("express-session");
 dotenv.config();
-const { authenticate } = require("./authenticate");
-const { validEmail, validPassword, newFunc } = require("./helpers");
+const {
+    validEmail,
+    validPassword,
+    checkUserExists,
+    insertUser,
+    checkLogin,
+} = require("./helpers");
 const app = express();
 const PORT = process.env.PORT || 5000;
-const uri = process.env.URI;
-const client = new MongoClient(uri);
+const oneDay = 24 * 60 * 60 * 1000;
+var session;
 
 app.use(cors());
 app.use(express.json());
-app.use(authenticate);
 
-async function run(userName, userPass) {
-    try {
-        const database = client.db("netflixClone");
-        const userData = database.collection("userData");
-        // Query for a movie that has the title 'Back to the Future'
-        const data = { userName: userName, userPass: userPass };
-
-        const res = await userData.insertOne(data);
-
-        console.log(`Doc inserted with id: ${res.insertedId}`);
-        // const query = { name: "mohammed" };
-        // const user = await userData.findOne(query);
-        // console.log(user);
-    } finally {
-        // Ensures that the client will close when you finish/error
-        await client.close();
+async function checkWrapper(user) {
+    let isExists = false;
+    if (await checkUserExists(user)) {
+        isExists = true;
     }
+    return isExists;
 }
 
+app.use(
+    sessions({
+        secret: process.env.SESSION_SECRET,
+        saveUninitialized: true,
+        cookie: { maxAge: oneDay },
+        resave: false,
+    })
+);
+
+app.post("/api/session", (req, res) => {
+    const sessionId = req.session.userId || "";
+    if (sessionId) {
+        res.json({ status: "success" });
+        res.end();
+    } else {
+        res.json({ status: "failure" });
+        res.end();
+    }
+});
+
 app.post("/api/signup", (req, res) => {
-    console.log("req ", req.body);
+    // console.log("req ", req.body);
     const { userName, userPass, confirmPass } = req.body;
     if (!validEmail(userName)) {
         // console.log("valid username");
@@ -52,33 +67,57 @@ app.post("/api/signup", (req, res) => {
         });
         res.end();
     } else {
-        console.log("valid credentials");
-        // run(userName, userPass).catch((err) => {
-        //     console.log(err);
-        // });
-        res.json({ abcd: "efgh", hijk: "lmnop" });
-        res.end();
+        // console.log("valid credentials");
+        checkWrapper(userName).then((isExists) => {
+            if (isExists) {
+                // console.log("Sorry user exists");
+                res.json({
+                    status: "failure",
+                    message: "User with this name already exists",
+                });
+                res.end();
+            } else {
+                insertUser(userName, userPass).then((insertStatus) => {
+                    if (insertStatus === true) {
+                        res.json({
+                            status: "success",
+                            message: "User Successfully created",
+                        });
+                        res.end();
+                    } else {
+                        res.json({
+                            status: "failure",
+                            message:
+                                "Could not create user, please try after some time",
+                        });
+                        res.end();
+                    }
+                });
+            }
+        });
     }
 });
 
-app.post("/api/login", newFunc, (req, res) => {
-    const userName = "mohammed";
-    const password = "password";
+app.post("/api/login", (req, res) => {
     const { userEmail, userPass } = req.body;
-    // console.log("data = ", userEmail, userPass);
-    if (userEmail === userName && userPass === password) {
-        res.status(200).json({
-            status: "success",
-            message: "User successfully Authenticated",
-        });
-        res.end();
-    } else {
-        res.json({
-            status: "failure",
-            message: "Incorrect Id or password",
-        });
-        res.end();
-    }
+    checkLogin(userEmail, userPass).then((results) => {
+        if (results.status === "success") {
+            session = req.session;
+            session.userId = userEmail;
+            // console.log("ses det: ", session);
+            res.json(results);
+            res.end();
+        } else {
+            res.json(results);
+            res.end();
+        }
+    });
+});
+
+app.post("/api/logout", (req, res) => {
+    req.session.destroy();
+    res.json({ status: "success" });
+    res.end();
 });
 
 app.listen(PORT, () => {
